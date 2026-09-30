@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nova AI Receptionist</title>
+<meta name="description" content="An open-source AI receptionist built with n8n: answers FAQs from a Google Sheet and captures leads. By Laveeza Fatima.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Manrope:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* Layout: two columns — the pitch on the left, a working chat on the right. Stacks on phones. */
+  :root {
+    --bg: #f4f2ee;          /* warm paper */
+    --panel: #ffffff;
+    --ink: #17171b;
+    --muted: #6a6862;
+    --line: #e2ded6;
+    --accent: #0f766e;      /* receptionist teal */
+    --accent-soft: #dff1ee;
+    --bot: #f1efea;
+    --tool: #fff6e5;
+    --tool-ink: #8a5a00;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --body: "Manrope", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111214; --panel: #191a1d; --ink: #eceae5; --muted: #9a978f; --line: #2b2c30;
+      --accent: #2dd4bf; --accent-soft: #123a36; --bot: #222327; --tool: #2d2615; --tool-ink: #f5c261;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); line-height: 1.55; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding-inline: clamp(16px, 4vw, 40px); padding-block: clamp(28px, 6vw, 72px);
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 440px); gap: clamp(28px, 5vw, 64px); align-items: start; }
+
+  .pitch { min-width: 0; }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(40px, 6vw, 68px); line-height: 1; letter-spacing: -0.03em; margin: 14px 0 18px; text-wrap: balance; }
+  .lede { font-size: 18px; color: var(--muted); max-width: 52ch; margin: 0 0 28px; }
+  .steps { list-style: none; padding: 0; margin: 0 0 28px; display: grid; gap: 10px; }
+  .steps li { display: grid; grid-template-columns: 34px 1fr; gap: 12px; align-items: baseline; }
+  .steps b { font-family: var(--mono); font-weight: 500; font-size: 12px; color: var(--accent); }
+  .steps span { font-size: 15px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+  .chip { font-family: var(--mono); font-size: 12px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+  .by { font-size: 14px; color: var(--muted); }
+  .by a { color: var(--ink); font-weight: 600; }
+
+  /* Chat */
+  .chat { background: var(--panel); border: 1px solid var(--line); border-radius: 22px; overflow: hidden; display: flex; flex-direction: column;
+    height: min(640px, 78vh); min-height: 460px; box-shadow: 0 30px 60px -30px rgba(20, 20, 30, .25); }
+  .chat-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+  .avatar { width: 38px; height: 38px; border-radius: 12px; background: var(--accent); color: #fff; display: grid; place-items: center; font-family: var(--display); font-weight: 700; }
+  .who { flex: 1; min-width: 0; }
+  .who strong { display: block; font-size: 15px; }
+  .who small { color: var(--muted); font-size: 12px; }
+  .mode { font-family: var(--mono); font-size: 11px; padding: 4px 8px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+  .log { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 10px; scroll-behavior: smooth; }
+  .msg { max-width: 82%; padding: 10px 14px; border-radius: 16px; font-size: 14.5px; white-space: pre-line; animation: pop .25s ease-out; }
+  .msg.bot { background: var(--bot); border-bottom-left-radius: 6px; align-self: flex-start; }
+  .msg.user { background: var(--accent); color: #fff; border-bottom-right-radius: 6px; align-self: flex-end; }
+  .tool { align-self: flex-start; font-family: var(--mono); font-size: 11.5px; padding: 5px 10px; border-radius: 8px; background: var(--tool); color: var(--tool-ink); animation: pop .25s ease-out; }
+  .typing { align-self: flex-start; display: flex; gap: 4px; padding: 12px 14px; background: var(--bot); border-radius: 16px; }
+  .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: blink 1s infinite; }
+  .typing i:nth-child(2) { animation-delay: .15s; } .typing i:nth-child(3) { animation-delay: .3s; }
+  .quick { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 18px 10px; }
+  .quick button { font: 500 12.5px var(--body); color: var(--ink); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 6px 11px; cursor: pointer; }
+  .quick button:hover { border-color: var(--accent); color: var(--accent); }
+  form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); }
+  input { flex: 1; min-width: 0; font: 15px var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; }
+  input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  form button { font: 600 14px var(--body); color: #fff; background: var(--accent); border: 0; border-radius: 12px; padding: 0 16px; cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @keyframes pop { from { opacity: 0; transform: translateY(6px); } }
+  @keyframes blink { 50% { opacity: .3; } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; scroll-behavior: auto !important; } }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } .chat { height: 560px; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <section class="pitch">
+    <div class="eyebrow">Open-source n8n template</div>
+    <h1>Nova, the AI receptionist that never sleeps</h1>
+    <p class="lede">Answers customer questions from a Google Sheet, qualifies people who want to book, and saves every lead for the team. It runs 24/7 and costs nothing when idle.</p>
+    <ol class="steps">
+      <li><b>01</b><span>A customer messages the chat, any time of day.</span></li>
+      <li><b>02</b><span>The AI agent looks up the answer in the business's knowledge sheet, so it never makes up prices or hours.</span></li>
+      <li><b>03</b><span>If they want to book, it collects name, contact and need, one question at a time.</span></li>
+      <li><b>04</b><span>The lead is saved to a Leads sheet and the team follows up.</span></li>
+    </ol>
+    <div class="chips">
+      <span class="chip">n8n</span><span class="chip">AI Agent + tool-calling</span><span class="chip">Gemini</span>
+      <span class="chip">Google Sheets</span><span class="chip">Conversation memory</span>
+    </div>
+    <p class="by">Built by <a href="https://laveeza-fatima.github.io" target="_blank" rel="noopener">Laveeza Fatima</a> · <a href="https://github.com/Laveeza-Fatima/ai-receptionist-agent" target="_blank" rel="noopener">Source on GitHub</a></p>
+  </section>
+
+  <section class="chat" aria-label="Chat with Nova">
+    <div class="chat-head">
+      <div class="avatar" aria-hidden="true">N</div>
+      <div class="who"><strong>Nova · Glow Studio</strong><small>Sample business · replies instantly</small></div>
+      <span class="mode" id="mode">Demo mode</span>
+    </div>
+    <div class="log" id="log" aria-live="polite"></div>
+    <div class="quick" id="quick">
+      <button type="button">What are your hours?</button>
+      <button type="button">How much is a facial?</button>
+      <button type="button">I'd like to book a haircut</button>
+    </div>
+    <form id="form" autocomplete="off">
+      <label for="text" class="sr" style="position:absolute;left:-9999px">Message</label>
+      <input id="text" placeholder="Ask Nova anything…" maxlength="400">
+      <button type="submit">Send</button>
+    </form>
+  </section>
+</main>
+
+<script>
+/* ------------------------------------------------------------------
+   CONFIG: paste your n8n Chat Trigger URL here to switch from the
+   scripted demo to the real AI agent (see README → "Go live").
+------------------------------------------------------------------ */
+const N8N_CHAT_URL = "";
+
+const log = document.getElementById("log");
+const form = document.getElementById("form");
+const input = document.getElementById("text");
+const sessionId = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now());
+if (N8N_CHAT_URL) document.getElementById("mode").textContent = "Live AI";
+
+const add = (cls, text) => { const el = document.createElement("div"); el.className = cls; el.textContent = text; log.appendChild(el); log.scrollTop = log.scrollHeight; return el; };
+const typing = () => { const el = document.createElement("div"); el.className = "typing"; el.innerHTML = "<i></i><i></i><i></i>"; log.appendChild(el); log.scrollTop = log.scrollHeight; return el; };
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ---- Demo brain: mirrors sample-data/knowledge-base.csv and the agent's rules ---- */
+const KB = [
+  { k: /hour|open|close|timing|sunday/i, a: "We're open Monday to Saturday, 10:00 AM to 8:00 PM, and closed on Sundays." },
+  { k: /where|location|address|park/i, a: "You'll find us at Glow Studio, 24 Main Boulevard, Islamabad. There's free parking in front." },
+  { k: /facial/i, a: "A classic facial is PKR 4,000, and the hydrating facial (60 minutes) is PKR 6,500." },
+  { k: /makeup|party/i, a: "Party makeup starts at PKR 8,000 and includes a hairstyle." },
+  { k: /colou?r/i, a: "Hair colour starts at PKR 6,000." },
+  { k: /haircut|blow|hair/i, a: "A haircut & blow-dry starts at PKR 2,500." },
+  { k: /cancel|policy|late/i, a: "Please cancel at least 12 hours before your appointment. Late cancellations may need a deposit next time." },
+  { k: /pay|card|cash|transfer/i, a: "We accept cash, bank transfer and all major cards." },
+  { k: /service|offer|do you do/i, a: "We offer haircuts & styling, hair colour, facials, manicures & pedicures, and party makeup." },
+];
+const lead = { step: null, name: "", contact: "", need: "" };
+
+async function demoReply(text) {
+  const t = text.trim();
+  if (lead.step === "name") { lead.name = t; lead.step = "contact"; return [["bot", `Thanks, ${t.split(" ")[0]}! What's the best phone number or email to reach you?`]]; }
+  if (lead.step === "contact") { lead.contact = t; lead.step = null;
+    return [["tool", "tool · save_lead → Leads sheet ✓"], ["bot", `All set! I've passed your request (${lead.need}) to the team. They'll contact you at ${t} to confirm a time.`]]; }
+  if (/book|appointment|reserve|schedule|slot/i.test(t)) {
+    lead.need = t.replace(/^(i'?d like to|i want to|can i|please)\s*/i, "").replace(/\?$/, ""); lead.step = "name";
+    return [["bot", "I'd love to help you book. May I have your full name?"]];
+  }
+  const hit = KB.find((e) => e.k.test(t));
+  if (hit) return [["tool", "tool · search_knowledge_base"], ["bot", hit.a + "\n\nWould you like me to book you in?"]];
+  if (/^(hi|hey|hello|salam|assalam)/i.test(t)) return [["bot", "Hi! I'm Nova, Glow Studio's assistant. Ask me about services, prices or hours, or I can help you book."]];
+  return [["tool", "tool · search_knowledge_base"], ["bot", "I couldn't find that in our info, so I don't want to guess. Want me to take your details so the team can answer you?"]];
+}
+
+async function liveReply(text) {
+  const res = await fetch(N8N_CHAT_URL, { method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "sendMessage", sessionId, chatInput: text }) });
+  if (!res.ok) throw new Error(`n8n returned ${res.status}`);
+  const data = await res.json();
+  return [["bot", data.output || data.text || JSON.stringify(data)]];
+}
+
+async function send(text, fast) {
+  if (!text.trim()) return;
+  add("msg user", text);
+  const dots = typing();
+  let out;
+  try { out = N8N_CHAT_URL ? await liveReply(text) : await demoReply(text); }
+  catch (e) { out = [["bot", "Sorry, I couldn't reach the assistant right now. Please try again in a moment."]]; }
+  await wait(fast ? 60 : 650);
+  dots.remove();
+  for (const [kind, msg] of out) { add(kind === "tool" ? "tool" : "msg bot", msg); await wait(fast ? 30 : 250); }
+}
+
+form.addEventListener("submit", (e) => { e.preventDefault(); const t = input.value; input.value = ""; send(t); });
+document.getElementById("quick").addEventListener("click", (e) => { if (e.target.tagName === "BUTTON") send(e.target.textContent); });
+
+add("msg bot", "Hi! I'm Nova, Glow Studio's AI receptionist. Ask me about prices, hours or services, or I can help you book an appointment.");
+
+/* ?autoplay plays a short conversation (used for the README screenshot) */
+if (new URLSearchParams(location.search).has("autoplay")) {
+  (async () => { for (const m of ["How much is a facial?", "I'd like to book a facial on Saturday", "Ayesha Khan", "0300 1234567"]) await send(m, true); })();
+}
+</script>
+</body>
+</html>

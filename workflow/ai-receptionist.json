@@ -1,0 +1,138 @@
+{
+  "name": "AI Receptionist (FAQ + Lead Capture)",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "options": {}
+      },
+      "id": "4a7c1d0e-1b2f-4e3a-9c11-0a1b2c3d4e01",
+      "name": "When chat message received",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 0],
+      "webhookId": "b3f1c2a4-5d6e-4f70-8a91-2b3c4d5e6f70"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are Nova, a friendly AI receptionist for a small service business.\n\nGoals, in order:\n1. Answer questions about the business (services, prices, hours, location, policies). ALWAYS call the `search_knowledge_base` tool before answering a factual question, and answer only from what it returns. If the answer is not there, say you'll ask the team and offer to take the person's details.\n2. When someone wants to book, get a quote, or be contacted, collect: full name, phone or email, and what they need. Ask for one thing at a time.\n3. Once you have name + contact + need, call `save_lead` exactly once, then confirm that the team will get back to them.\n\nStyle: short, warm, plain language. One question per message. Never invent prices, times or policies."
+        }
+      },
+      "id": "4a7c1d0e-1b2f-4e3a-9c11-0a1b2c3d4e02",
+      "name": "AI Receptionist",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [320, 0]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "4a7c1d0e-1b2f-4e3a-9c11-0a1b2c3d4e03",
+      "name": "Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [180, 240]
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 20
+      },
+      "id": "4a7c1d0e-1b2f-4e3a-9c11-0a1b2c3d4e04",
+      "name": "Conversation Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [340, 240]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "search_knowledge_base: returns every row of the business knowledge base (columns: topic, question, answer). Use it to answer any question about services, prices, hours, location or policies.",
+        "documentId": {
+          "__rl": true,
+          "value": "PASTE_YOUR_GOOGLE_SHEET_URL_HERE",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Knowledge",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "4a7c1d0e-1b2f-4e3a-9c11-0a1b2c3d4e05",
+      "name": "search_knowledge_base",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [500, 240]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "save_lead: saves a new lead once you have the person's name, a phone number or email, and what they need.",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "PASTE_YOUR_GOOGLE_SHEET_URL_HERE",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Leads",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $now.toISO() }}",
+            "name": "={{ $fromAI('name', 'Full name of the person', 'string') }}",
+            "contact": "={{ $fromAI('contact', 'Phone number or email address', 'string') }}",
+            "need": "={{ $fromAI('need', 'What they want: service, date/time preference, question', 'string') }}",
+            "status": "new"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "timestamp", "displayName": "timestamp", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "name", "displayName": "name", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "contact", "displayName": "contact", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "need", "displayName": "need", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "status", "displayName": "status", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4a7c1d0e-1b2f-4e3a-9c11-0a1b2c3d4e06",
+      "name": "save_lead",
+      "type": "n8n-nodes-base.googleSheetsTool",
+      "typeVersion": 4.5,
+      "position": [660, 240]
+    }
+  ],
+  "connections": {
+    "When chat message received": {
+      "main": [[{ "node": "AI Receptionist", "type": "main", "index": 0 }]]
+    },
+    "Gemini Chat Model": {
+      "ai_languageModel": [[{ "node": "AI Receptionist", "type": "ai_languageModel", "index": 0 }]]
+    },
+    "Conversation Memory": {
+      "ai_memory": [[{ "node": "AI Receptionist", "type": "ai_memory", "index": 0 }]]
+    },
+    "search_knowledge_base": {
+      "ai_tool": [[{ "node": "AI Receptionist", "type": "ai_tool", "index": 0 }]]
+    },
+    "save_lead": {
+      "ai_tool": [[{ "node": "AI Receptionist", "type": "ai_tool", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1" },
+  "active": false,
+  "tags": []
+}
